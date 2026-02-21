@@ -6,7 +6,7 @@ import { analyzePrescription } from "@/actions/parse-prescription";
 
 export default function OCRPage() {
     const [imagePreview, setImagePreview] = useState<string | null>(null);
-    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [status, setStatus] = useState<"idle" | "uploading" | "processing" | "completed" | "error">("idle");
     const [extractedData, setExtractedData] = useState<any[] | null>(null);
     const [error, setError] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -21,12 +21,13 @@ export default function OCRPage() {
         // Reset state before processing
         setExtractedData(null);
         setError(null);
+        setStatus("uploading");
 
         // Set preview
         const objectUrl = URL.createObjectURL(file);
         setImagePreview(objectUrl);
 
-        setIsAnalyzing(true);
+        setStatus("processing");
 
         try {
             const formData = new FormData();
@@ -36,13 +37,14 @@ export default function OCRPage() {
 
             if (result.success) {
                 setExtractedData(result.data);
+                setStatus("completed");
             } else {
                 setError(result.error);
+                setStatus("error");
             }
         } catch (err: any) {
             setError(err.message || "An unexpected error occurred");
-        } finally {
-            setIsAnalyzing(false);
+            setStatus("error");
         }
     };
 
@@ -59,7 +61,7 @@ export default function OCRPage() {
 
     const openFileDialog = () => {
         // Only allow clicking if not currently analyzing
-        if (!isAnalyzing) {
+        if (status === "idle" || status === "error" || status === "completed") {
             fileInputRef.current?.click();
         }
     };
@@ -82,7 +84,7 @@ export default function OCRPage() {
                         onClick={openFileDialog}
                         onDragOver={handleDragOver}
                         onDrop={handleDrop}
-                        className={`border-2 border-dashed border-white/10 hover:border-cyan-500/50 bg-white/[0.01] rounded-2xl h-[400px] flex flex-col items-center justify-center relative overflow-hidden transition-all duration-300 ${isAnalyzing ? "pointer-events-none cursor-default" : "cursor-pointer"
+                        className={`border-2 border-dashed border-white/10 hover:border-cyan-500/50 bg-white/[0.01] rounded-2xl h-[400px] flex flex-col items-center justify-center relative overflow-hidden transition-all duration-300 ${status === "processing" || status === "uploading" ? "pointer-events-none cursor-default" : "cursor-pointer"
                             }`}
                     >
                         <input
@@ -109,12 +111,12 @@ export default function OCRPage() {
                             />
                         )}
 
-                        {isAnalyzing && (
+                        {(status === "processing" || status === "uploading") && (
                             <>
                                 <div className="absolute inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-10">
                                     <div className="text-center">
                                         <div className="text-cyan-400 font-semibold tracking-wider text-lg animate-pulse">
-                                            Azure + Gemini 3.1 Pro processing...
+                                            {status === "uploading" ? "Uploading image..." : "Azure + Gemini 3.1 Pro processing..."}
                                         </div>
                                     </div>
                                 </div>
@@ -130,7 +132,7 @@ export default function OCRPage() {
                     <div className="bg-white/[0.02] backdrop-blur-2xl border border-white/[0.05] shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] rounded-2xl p-6 h-[400px] flex flex-col">
 
                         {/* Error Message */}
-                        {error && (
+                        {status === "error" && error && (
                             <div className="mb-4 bg-red-500/10 border border-red-500/20 backdrop-blur-md text-red-400 p-4 rounded-xl flex items-start gap-4">
                                 <AlertCircle className="w-6 h-6 shrink-0" />
                                 <div className="leading-relaxed font-medium">{error}</div>
@@ -138,15 +140,23 @@ export default function OCRPage() {
                         )}
 
                         {/* Empty State */}
-                        {!extractedData && !error && (
+                        {(status === "idle" || status === "uploading") && (
                             <div className="flex-1 flex flex-col items-center justify-center text-white/30 gap-4">
                                 <Sparkles className="w-10 h-10 opacity-20" />
                                 <p className="text-lg">Structured results will appear here</p>
                             </div>
                         )}
 
+                        {/* Processing Skeleton State */}
+                        {status === "processing" && (
+                            <div className="flex-1 flex flex-col items-center justify-center text-cyan-400/50 gap-4">
+                                <div className="w-10 h-10 border-4 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin"></div>
+                                <p className="text-lg animate-pulse">Extracting medication data...</p>
+                            </div>
+                        )}
+
                         {/* Results State */}
-                        {extractedData && (
+                        {status === "completed" && extractedData && (
                             <div className="flex-1 flex flex-col h-full overflow-hidden">
                                 <div className="flex items-center justify-between mb-4">
                                     <h2 className="text-xl font-semibold text-white/90">Extracted Medications</h2>

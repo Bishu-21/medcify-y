@@ -1,7 +1,6 @@
 "use server";
 
-import { DocumentIntelligenceClient } from "@azure/ai-document-intelligence";
-import { AzureKeyCredential } from "@azure/core-auth";
+import { DocumentAnalysisClient, AzureKeyCredential } from "@azure/ai-form-recognizer";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export async function analyzePrescription(formData: FormData) {
@@ -23,8 +22,8 @@ export async function analyzePrescription(formData: FormData) {
             throw new Error("Azure Document Intelligence credentials not found");
         }
 
-        // Initialize DocumentIntelligenceClient using the Azure Endpoint and AzureKeyCredential
-        const client = new DocumentIntelligenceClient(endpoint, new AzureKeyCredential(apiKey));
+        // Initialize DocumentAnalysisClient using the Azure Endpoint and AzureKeyCredential
+        const client = new DocumentAnalysisClient(endpoint, new AzureKeyCredential(apiKey));
 
         // Call the prebuilt-read model, passing the image buffer
         const poller = await client.beginAnalyzeDocument("prebuilt-read", uint8Array);
@@ -55,7 +54,7 @@ export async function analyzePrescription(formData: FormData) {
         // Initialize GoogleGenerativeAI using the Gemini API key
         const genAI = new GoogleGenerativeAI(geminiKey);
         // Use the gemini-3.1-pro model
-        const model = genAI.getGenerativeModel({ model: "gemini-3.1-pro" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
         // Prompt as requested
         const prompt = `You are an expert medical AI. Parse this raw OCR text extracted from a messy handwritten prescription: ${rawText}. Extract the medications and return ONLY a valid JSON array of objects with the keys: 'name', 'dosage', 'frequency', 'duration'. Return raw JSON only, no markdown.`;
