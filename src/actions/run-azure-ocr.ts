@@ -87,4 +87,9 @@ export async function runAzureOCR(fileId: string) {
             attempt++;
         }
     }
+
+    return {
+        success: false,
+        error: "Max retries exceeded."
+    };
 }
