@@ -44,7 +44,8 @@ export default function DashboardLayout({
         try {
             await logout();
         } catch {
-            router.push("/auth");
+        } finally {
+            router.push("/");
         }
     };
 

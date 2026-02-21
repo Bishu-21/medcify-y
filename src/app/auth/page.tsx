@@ -180,7 +180,14 @@ export default function AuthPage() {
                 </section>
 
                 {/* Right Column (Auth Form) */}
-                <section className="w-full md:w-7/12 p-6 md:p-12 flex flex-col justify-center bg-brand-background/50 backdrop-blur-sm">
+                <section className="w-full md:w-7/12 p-6 md:p-12 flex flex-col justify-center bg-brand-background/50 backdrop-blur-sm relative">
+
+                    {/* Mobile Only: Back to Home Button */}
+                    <div className="absolute top-6 left-6 md:hidden">
+                        <Link href="/" className="inline-flex items-center justify-center p-2 rounded-full bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-colors">
+                            <Activity className="w-4 h-4" />
+                        </Link>
+                    </div>
 
                     {/* Verification Sent State */}
                     {isVerificationSent ? (
