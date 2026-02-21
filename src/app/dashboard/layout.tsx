@@ -94,8 +94,8 @@ export default function DashboardLayout({
                 <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-cyan-500/10 rounded-full blur-[100px] opacity-20"></div>
             </div>
 
-            {/* Sidebar */}
-            <aside className="w-72 glass-sidebar flex flex-col z-20 shrink-0">
+            {/* Sidebar (Desktop Only) */}
+            <aside className="hidden md:flex w-72 glass-sidebar flex-col z-20 shrink-0">
                 {/* Logo Section */}
                 <div className="h-24 flex items-center px-8">
                     <div className="flex items-center gap-3">
@@ -128,12 +128,12 @@ export default function DashboardLayout({
                         <Heart className="w-5 h-5" />
                         <span className="font-medium">Wellness Hub</span>
                     </a>
-                    <a href="#" className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all">
+                    <a href="/dashboard/orders" className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all">
                         <ShoppingCart className="w-5 h-5" />
                         <span className="font-medium">Orders</span>
                         <span className="ml-auto w-5 h-5 bg-red-500/20 text-red-400 text-xs font-bold rounded-full flex items-center justify-center">3</span>
                     </a>
-                    <a href="#" className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all">
+                    <a href="/dashboard/network" className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all">
                         <Map className="w-5 h-5" />
                         <span className="font-medium">Network Map</span>
                     </a>
@@ -163,11 +163,11 @@ export default function DashboardLayout({
             </aside>
 
             {/* Main Wrapper */}
-            <div className="flex-1 flex flex-col min-w-0 z-10">
+            <div className="flex-1 flex flex-col min-w-0 z-10 pb-16 md:pb-0">
                 {/* Top Navbar */}
-                <header className="h-20 glass-navbar flex items-center justify-between px-8 shrink-0">
-                    <div className="flex items-center gap-6">
-                        <h1 className="text-2xl font-semibold text-slate-50">Overview</h1>
+                <header className="h-16 md:h-20 glass-navbar flex items-center justify-between px-4 md:px-8 shrink-0">
+                    <div className="flex items-center gap-4 md:gap-6">
+                        <h1 className="text-xl md:text-2xl font-semibold text-slate-50 relative top-0.5">Medcify Dashboard</h1>
                         <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-full bg-cyan-400/10 border border-cyan-400/20">
                             <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse-cyan"></div>
                             <span className="text-xs font-medium text-cyan-400 uppercase tracking-wider">AI Sync: Active</span>
@@ -175,7 +175,7 @@ export default function DashboardLayout({
                     </div>
                     <div className="flex items-center gap-6">
                         {/* Search Bar */}
-                        <div className="relative w-64 hidden md:block">
+                        <div className="relative w-48 lg:w-64 hidden sm:block">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
                             <input
                                 className="w-full bg-white/[0.04] border border-white/[0.05] rounded-xl pl-10 pr-4 py-2 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-cyan-400 focus:border-cyan-400 placeholder:text-slate-500 transition-all"
@@ -197,10 +197,34 @@ export default function DashboardLayout({
                 </header>
 
                 {/* Main Content Area */}
-                <main className="flex-1 p-8 overflow-y-auto">
+                <main className="flex-1 p-4 md:p-8 overflow-y-auto custom-scrollbar">
                     {children}
                 </main>
             </div>
+
+            {/* Mobile Bottom Navigation (Mobile Only) */}
+            <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-[#0B0F19]/90 backdrop-blur-xl border-t border-white/10 z-50 flex items-center justify-around px-2 pb-safe shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+                <a href="/dashboard" className="flex flex-col items-center justify-center w-12 h-12 text-slate-500 hover:text-white">
+                    <LayoutDashboard className="w-5 h-5 mb-1" />
+                    <span className="text-[9px] font-medium tracking-wide">Home</span>
+                </a>
+                <a href="/dashboard/ocr" className="flex flex-col items-center justify-center w-12 h-12 text-cyan-400">
+                    <Search className="w-5 h-5 mb-1 text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]" />
+                    <span className="text-[9px] font-semibold tracking-wide">OCR</span>
+                </a>
+                <a href="/dashboard/inventory" className="flex flex-col items-center justify-center w-12 h-12 text-slate-500 hover:text-white">
+                    <Package className="w-5 h-5 mb-1" />
+                    <span className="text-[9px] font-medium tracking-wide">Stock</span>
+                </a>
+                <a href="/dashboard/procurement" className="flex flex-col items-center justify-center w-12 h-12 text-slate-500 hover:text-white">
+                    <TrendingUp className="w-5 h-5 mb-1" />
+                    <span className="text-[9px] font-medium tracking-wide">AI</span>
+                </a>
+                <button onClick={handleLogout} className="flex flex-col items-center justify-center w-12 h-12 text-slate-500 hover:text-red-400 transition-colors">
+                    <LogOut className="w-5 h-5 mb-1" />
+                    <span className="text-[9px] font-medium tracking-wide">Exit</span>
+                </button>
+            </nav>
         </div>
     );
 }
