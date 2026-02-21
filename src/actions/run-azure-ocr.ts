@@ -4,7 +4,6 @@ import { DocumentAnalysisClient, AzureKeyCredential } from "@azure/ai-form-recog
 import { createAdminClient } from "@/lib/appwrite/server";
 
 // Keep it strictly Node.js runtime for Appwrite + Azure SDKs
-export const runtime = "nodejs";
 
 export async function runAzureOCR(fileId: string) {
     let attempt = 0;
@@ -18,7 +17,7 @@ export async function runAzureOCR(fileId: string) {
 
             // 1. Fetch file from Appwrite Storage
             const { storage } = await createAdminClient();
-            const bucketId = "prescriptions";
+            const bucketId = process.env.NEXT_PUBLIC_APPWRITE_BUCKET_ID!;
 
             // getFileDownload returns an ArrayBuffer
             const fileBuffer = await storage.getFileDownload(bucketId, fileId);

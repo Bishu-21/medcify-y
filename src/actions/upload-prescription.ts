@@ -25,14 +25,18 @@ export async function uploadPrescriptionImage(formData: FormData) {
 
         const { storage } = await createAdminClient();
 
-        const bucketId = "prescriptions";
+        const bucketId = process.env.NEXT_PUBLIC_APPWRITE_BUCKET_ID!;
         const fileId = ID.unique();
 
         // Convert file to InputFile for node-appwrite
         const buffer = Buffer.from(await file.arrayBuffer());
         const inputFile = InputFile.fromBuffer(buffer, file.name || "prescription-upload");
 
-        const uploadedFile = await storage.createFile(bucketId, fileId, inputFile);
+        const uploadedFile = await storage.createFile({
+            bucketId,
+            fileId,
+            file: inputFile,
+        });
 
         const endpoint = process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT || "https://cloud.appwrite.io/v1";
         const projectId = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID;

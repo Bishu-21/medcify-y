@@ -2,14 +2,19 @@
 
 import { useState } from "react";
 import { UploadCloud, FileText, CheckCircle2, AlertCircle, ScanLine, User } from "lucide-react";
-import { analyzePrescription } from "@/actions/parse-prescription";
+import { uploadPrescriptionImage } from "@/actions/upload-prescription";
+import { runAzureOCR } from "@/actions/run-azure-ocr";
+import { parsePrescriptionWithGemini } from "@/actions/parse-with-gemini";
+import { savePrescriptionRecord } from "@/actions/save-prescription";
+import { getPrescriptionRecord } from "@/actions/get-prescription";
 
 export default function OCRPage() {
     const [dragActive, setDragActive] = useState(false);
     const [file, setFile] = useState<File | null>(null);
     const [status, setStatus] = useState<"idle" | "uploading" | "processing" | "completed" | "error">("idle");
     const [error, setError] = useState<string | null>(null);
-    const [extractedData, setExtractedData] = useState<any[] | null>(null);
+    const [extractedData, setExtractedData] = useState<any | null>(null);
+    const [documentId, setDocumentId] = useState<string | null>(null);
 
     const handleDrag = (e: React.DragEvent) => {
         e.preventDefault();
@@ -42,21 +47,71 @@ export default function OCRPage() {
         setStatus("uploading");
         setError(null);
         setExtractedData(null);
+        setDocumentId(null);
 
         try {
+            // 1. Upload to Appwrite
             const formData = new FormData();
             formData.append("file", selectedFile);
 
-            setStatus("processing");
-            const result = await analyzePrescription(formData);
-
-            if (result.success) {
-                setExtractedData(result.data);
-                setStatus("completed");
-            } else {
-                setError(result.error);
-                setStatus("error");
+            const uploadRes = await uploadPrescriptionImage(formData);
+            if (!uploadRes.success || !uploadRes.fileId || !uploadRes.imageUrl) {
+                throw new Error(uploadRes.error || "Upload failed");
             }
+
+            setStatus("processing");
+
+            // 2. Azure OCR
+            const ocrRes = await runAzureOCR(uploadRes.fileId);
+            if (!ocrRes.success || !ocrRes.rawText) {
+                throw new Error(ocrRes.error || "OCR extraction failed");
+            }
+
+            // 3. Parse with Gemini
+            const parseRes = await parsePrescriptionWithGemini(ocrRes.rawText);
+            if (!parseRes.success || !parseRes.data) {
+                throw new Error(parseRes.error || "Gemini parsing failed");
+            }
+
+            const { medicines, patientInfo } = parseRes.data;
+
+            // 4. Save the combined Record
+            const saveRes = await savePrescriptionRecord({
+                imageUrl: uploadRes.imageUrl,
+                rawText: ocrRes.rawText,
+                parsedMedicines: medicines || [],
+                ocrConfidence: ocrRes.ocrConfidence || 0
+            });
+            if (!saveRes.success || !saveRes.documentId) {
+                throw new Error(saveRes.error || "Failed to save record");
+            }
+
+            setDocumentId(saveRes.documentId);
+
+            // 5. Fetch to render
+            const fetchRes = await getPrescriptionRecord(saveRes.documentId);
+            if (!fetchRes.success || !fetchRes.data) {
+                throw new Error(fetchRes.error || "Failed to retrieve saved document");
+            }
+
+            // Safely parse JSON string output from the DB
+            let loadedMedicines = [];
+            let loadedCorrections = {};
+            try {
+                loadedMedicines = JSON.parse(fetchRes.data.parsedMedicines || "[]");
+                loadedCorrections = JSON.parse(fetchRes.data.corrections || "{}");
+            } catch (e) {
+                console.error("DB JSON parsing error", e);
+            }
+
+            setExtractedData({
+                ...fetchRes.data,
+                parsedMedicines: loadedMedicines,
+                corrections: loadedCorrections,
+                patientInfo: patientInfo || null
+            });
+
+            setStatus("completed");
         } catch (err: any) {
             setError(err.message || "An unexpected error occurred");
             setStatus("error");
@@ -177,30 +232,72 @@ export default function OCRPage() {
 
                     {status === "completed" && extractedData && (
                         <div className="space-y-6 animate-fade-in-up">
+
+                            <div className="flex justify-between items-center bg-white/5 border border-white/10 p-3 rounded-lg text-xs font-semibold uppercase tracking-wider text-slate-400">
+                                <div><span className="text-slate-500">Record ID:</span> {documentId}</div>
+                                <div className="text-right">
+                                    <span className="text-slate-500">Confidence:</span> {extractedData.ocrConfidence ? (extractedData.ocrConfidence * 100).toFixed(1) + "%" : "N/A"}
+                                    <span className="mx-2 text-slate-600">|</span>
+                                    <span className="text-slate-500">Added:</span> {new Date(extractedData.createdAt).toLocaleString()}
+                                </div>
+                            </div>
+
+                            {/* Patient Info */}
+                            {extractedData.patientInfo && Object.keys(extractedData.patientInfo).some(k => extractedData.patientInfo[k]) && (
+                                <div className="space-y-3">
+                                    <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                                        <User className="w-4 h-4" /> Detected Patient Information
+                                    </h3>
+                                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 p-4 bg-indigo-500/5 rounded-xl border border-indigo-500/10">
+                                        {['name', 'age', 'gender', 'date'].map(key => extractedData.patientInfo[key] ? (
+                                            <div key={key}>
+                                                <p className="text-xs text-slate-500 mb-1 capitalize">{key}</p>
+                                                <p className="text-slate-200 font-medium">{extractedData.patientInfo[key]}</p>
+                                            </div>
+                                        ) : null)}
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Medications */}
                             <div className="space-y-3">
                                 <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider flex items-center gap-2">
                                     <FileText className="w-4 h-4" /> Detected Medications
                                 </h3>
-                                <div className="space-y-3">
-                                    {extractedData.map((drug, idx) => (
+                                <div className="space-y-3 max-h-80 overflow-y-auto pr-2 custom-scrollbar">
+                                    {Array.isArray(extractedData.parsedMedicines) && extractedData.parsedMedicines.map((drug: any, idx: number) => (
                                         <div key={idx} className="p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-xl hover:bg-emerald-500/10 transition-colors">
                                             <div className="flex justify-between items-start mb-2">
-                                                <h4 className="text-emerald-300 font-medium">{drug.name || "Unknown"}</h4>
+                                                <h4 className="text-emerald-300 text-lg font-medium">{drug.name || "Unknown"} <span className="text-xs ml-2 text-white/50 bg-white/5 px-2 py-0.5 rounded">{drug.strength || ""}</span></h4>
+                                                {drug.confidence !== undefined && (
+                                                    <span className="text-[10px] text-slate-500 bg-black/20 px-2 py-1 rounded">Conf: {(drug.confidence * 100).toFixed(0)}%</span>
+                                                )}
                                             </div>
-                                            <div className="flex flex-wrap text-xs text-slate-400 gap-4">
-                                                <span><span className="text-slate-500">Freq:</span> {drug.frequency || "N/A"}</span>
-                                                <span><span className="text-slate-500">Dosage:</span> {drug.dosage || "N/A"}</span>
-                                                <span><span className="text-slate-500">Dur:</span> {drug.duration || "N/A"}</span>
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3">
+                                                <div className="flex flex-col">
+                                                    <span className="text-[10px] text-slate-500 uppercase font-semibold mb-1">Dosage</span>
+                                                    <span className="text-xs text-slate-300">{drug.dosage || "-"}</span>
+                                                </div>
+                                                <div className="flex flex-col">
+                                                    <span className="text-[10px] text-slate-500 uppercase font-semibold mb-1">Frequency</span>
+                                                    <span className="text-xs text-slate-300">{drug.frequency || "-"}</span>
+                                                </div>
+                                                <div className="flex flex-col">
+                                                    <span className="text-[10px] text-slate-500 uppercase font-semibold mb-1">Duration</span>
+                                                    <span className="text-xs text-slate-300">{drug.duration || "-"}</span>
+                                                </div>
+                                                <div className="flex flex-col">
+                                                    <span className="text-[10px] text-slate-500 uppercase font-semibold mb-1">Notes</span>
+                                                    <span className="text-xs text-slate-400 italic line-clamp-2">{drug.notes || "-"}</span>
+                                                </div>
                                             </div>
                                         </div>
                                     ))}
+                                    {(!Array.isArray(extractedData.parsedMedicines) || extractedData.parsedMedicines.length === 0) && (
+                                        <div className="p-4 bg-white/5 text-slate-400 rounded-xl text-center text-sm border border-white/10">No medications cleanly extracted.</div>
+                                    )}
                                 </div>
                             </div>
-
-                            <button className="w-full py-3 bg-cyan-500 text-black font-bold rounded-xl hover:bg-cyan-400 transition-colors shadow-lg shadow-cyan-500/20">
-                                Verify & Add to Inventory
-                            </button>
                         </div>
                     )}
                 </div>
