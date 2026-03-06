@@ -32,7 +32,7 @@ export const signInWithGoogle = async () => {
         const origin = window.location.origin;
         await account.createOAuth2Session(
             OAuthProvider.Google,
-            `${origin}/`,
+            `${origin}/api/auth/oauth`,
             `${origin}/auth`
         );
     } catch (error) {
@@ -54,8 +54,9 @@ export const getCurrentUser = async () => {
     try {
         const user = await account.get();
         return user;
-    } catch {
-        // console.error('Appwrite getCurrentUser error:', error);
+    } catch (error: any) {
+        // Appwrite returns 401/403 if no session exists or if guest.
+        // We return null silently as this is expected behavior for unauthenticated states.
         return null;
     }
 };

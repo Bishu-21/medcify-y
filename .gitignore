@@ -39,3 +39,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# stitch & tmp files
+stitch_*.html
+tmp_*.html
+mobile_dashboard.html
+desktop*.html
+mobile*.html
+*.html
+!src/**/*.html
+!public/**/*.html
+build-log.txt
+PROJECT_DOCUMENTATION.md
+passwords.txt

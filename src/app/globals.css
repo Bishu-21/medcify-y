@@ -46,15 +46,31 @@
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
 
-  /* Custom Medcify Colors (Dark Supply Chain OS) */
-  --color-brand-background: #0B0F19;
-  /* Deep Dark Blue */
-  --color-emerald-400: #34d399;
-  --color-emerald-500: #10b981;
+  /* Custom Medcify Colors (Dark Supply Chain OS) -> Mystic Maitri */
+  --color-brand-background: #0B1120;
+  /* Deep Navy */
+  --color-brand-slate: #0F172A;
+  /* Dark Slate */
+
+  /* Primary accents */
+  --color-teal-400: #2dd4bf;
+  --color-teal-500: #14b8a6;
+  /* Electric Teal */
   --color-cyan-400: #22d3ee;
   --color-cyan-500: #06b6d4;
+  /* Cyan */
   --color-slate-400: #94a3b8;
   --color-slate-50: #f8fafc;
+
+  /* Landing Page Colors */
+  --color-carbon: #1A1A1A;
+  --color-paper: #FFFFFF;
+  --color-grid: #E5E5E5;
+  --color-teal: #4B7F78;
+  --color-amber: #D4A373;
+
+  --font-serif: var(--font-playfair);
+  --font-mono: var(--font-jetbrains);
 }
 
 :root {
@@ -62,24 +78,24 @@
   /* 20px */
 
   /* Dark Mode Base */
-  --background: #0B0F19;
+  --background: #0B1120;
   --foreground: #f8fafc;
   /* Slate 50 */
 
-  --card: #0B0F19;
-  /* Transparent/Dark */
+  --card: #0F172A;
+  /* Dark Slate */
   --card-foreground: #f8fafc;
 
-  --popover: #0B0F19;
+  --popover: #0F172A;
   --popover-foreground: #f8fafc;
 
-  --primary: #10b981;
-  /* Emerald 500 */
+  --primary: #14b8a6;
+  /* Electric Teal */
   --primary-foreground: #ffffff;
 
-  --secondary: #0B0F19;
-  --secondary-foreground: #34d399;
-  /* Emerald 400 */
+  --secondary: #06b6d4;
+  /* Cyan */
+  --secondary-foreground: #ffffff;
 
   --muted: #1e293b;
   /* Slate 800 */
@@ -96,42 +112,40 @@
   --border: rgba(255, 255, 255, 0.08);
   /* White 8% */
   --input: rgba(255, 255, 255, 0.08);
-  --ring: #10b981;
+  --ring: #14b8a6;
 
-  --chart-1: #10b981;
+  --chart-1: #14b8a6;
   --chart-2: #06b6d4;
   --chart-3: #3b82f6;
   --chart-4: #a855f7;
   --chart-5: #ec4899;
 
-  --sidebar: #0B0F19;
+  --sidebar: #0B1120;
   --sidebar-foreground: #f8fafc;
-  --sidebar-primary: #10b981;
+  --sidebar-primary: #14b8a6;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #1e293b;
   --sidebar-accent-foreground: #f8fafc;
   --sidebar-border: rgba(255, 255, 255, 0.08);
-  --sidebar-ring: #10b981;
+  --sidebar-ring: #14b8a6;
 }
 
 @layer utilities {
   .glass-morphism {
-    @apply backdrop-blur-3xl border border-white/10 shadow-lg;
-    background: rgba(255, 255, 255, 0.03);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+    @apply bg-white/5 backdrop-blur-lg border border-white/10 shadow-lg;
   }
 
   .glass-card {
-    @apply backdrop-blur-3xl border border-white/10 shadow-2xl;
-    background: rgba(255, 255, 255, 0.03);
+    @apply bg-white/5 backdrop-blur-3xl border border-white/10 shadow-2xl;
   }
 
   .input-glow:focus {
-    box-shadow: 0 0 15px rgba(16, 185, 129, 0.15);
+    box-shadow: 0 0 15px rgba(20, 184, 166, 0.15);
+    /* Teal glow */
   }
 
   .gradient-text {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-emerald-400;
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-teal-400;
   }
 
   .mesh-gradient {
@@ -223,6 +237,60 @@
   .animate-pulse-cyan {
     animation: pulse-cyan 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
+
+  .bg-grid {
+    background-image:
+      linear-gradient(var(--color-grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--color-grid) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  .animate-marquee {
+    display: inline-flex;
+    animation: marquee 20s linear infinite;
+  }
+
+  @keyframes marquee {
+    0% {
+      transform: translateX(100%)
+    }
+
+    100% {
+      transform: translateX(-100%)
+    }
+  }
+
+  .animate-slide-down {
+    animation: slideDown 0.3s ease-out forwards;
+  }
+
+  @keyframes slideDown {
+    from {
+      opacity: 0;
+      transform: translateY(-5px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 1s ease-in forwards;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px)
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0)
+    }
+  }
 }
 
 @layer base {
@@ -231,6 +299,6 @@
   }
 
   body {
-    @apply bg-brand-background text-foreground antialiased selection:bg-emerald-500/30;
+    @apply bg-brand-background text-foreground antialiased selection:bg-teal-500/30;
   }
 }

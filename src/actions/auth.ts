@@ -19,21 +19,22 @@ export async function signUpWithEmail(formData: FormData) {
 
     try {
         // 1. Create the user in Appwrite Auth
-        const { account: adminAccount, database } = await createAdminClient();
-        const user = await adminAccount.create(ID.unique(), email, password, name);
+        const { users, database } = await createAdminClient();
+        const user = await users.create({
+            userId: ID.unique(),
+            email,
+            password,
+            name
+        });
 
-        // 2. Create a session for the new user
-        const publicClient = new Client()
-            .setEndpoint(process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT!)
-            .setProject(process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!);
-
-        const publicAccount = new Account(publicClient);
-        const session = await publicAccount.createEmailPasswordSession(email, password);
+        // 2. Create a session for the new user using the Admin Client
+        const { account: adminAccount } = await createAdminClient();
+        const session = await adminAccount.createEmailPasswordSession(email, password);
 
         (await cookies()).set("session", session.secret, {
             path: "/",
             httpOnly: true,
-            sameSite: "strict",
+            sameSite: "lax",
             secure: process.env.NODE_ENV === "production",
         });
 
@@ -86,17 +87,13 @@ export async function signInWithEmail(formData: FormData) {
     }
 
     try {
-        const publicClient = new Client()
-            .setEndpoint(process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT!)
-            .setProject(process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!);
-
-        const publicAccount = new Account(publicClient);
-        const session = await publicAccount.createEmailPasswordSession(email, password);
+        const { account } = await createAdminClient();
+        const session = await account.createEmailPasswordSession(email, password);
 
         (await cookies()).set("session", session.secret, {
             path: "/",
             httpOnly: true,
-            sameSite: "strict",
+            sameSite: "lax",
             secure: process.env.NODE_ENV === "production",
         });
 
@@ -192,7 +189,7 @@ export async function getLoggedInUser() {
 export async function logout() {
     try {
         const session = (await cookies()).get("session");
-        if (session) {
+        if (session && session.value) {
             const { account } = await createSessionClient(session.value);
             await account.deleteSession("current");
         }
@@ -200,6 +197,6 @@ export async function logout() {
         console.error("Logout Error:", error);
     } finally {
         (await cookies()).delete("session");
-        redirect("/auth");
+        redirect("/");
     }
 }

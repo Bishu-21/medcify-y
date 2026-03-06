@@ -1,450 +1,362 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Activity, Loader2, AlertCircle, Smartphone, KeyRound, Mail, ShieldCheck, CheckCircle2, Building2, FileText, User } from "lucide-react";
-import { signInWithEmail, signUpWithEmail, sendPhoneOtp, verifyPhoneOtp } from "@/actions/auth";
+import { Loader2 } from "lucide-react";
+import { signInWithEmail, signUpWithEmail } from "@/actions/auth";
+import { signInWithGoogle } from "@/lib/appwrite/api";
 
-type AuthMethod = "password" | "email-otp" | "phone";
+type AuthMode = "login" | "signup";
+type AccessRole = "Clinician" | "Pharmacist" | "Admin" | "Operations";
 
 export default function AuthPage() {
     const router = useRouter();
-    const [authMethod, setAuthMethod] = useState<AuthMethod>("password");
 
-    // Auth State
-    const [isSignUp, setIsSignUp] = useState(false);
+    // UI State
+    const [authMode, setAuthMode] = useState<AuthMode>("login");
+    const [role, setRole] = useState<AccessRole>("Clinician");
+
+    // Form State
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [successMessage, setSuccessMessage] = useState("");
-
-    // Success State (Post-Signup)
     const [isVerificationSent, setIsVerificationSent] = useState(false);
 
-    // OTP State
-    const [otpSent, setOtpSent] = useState(false);
-    const [userId, setUserId] = useState(""); // Needed for verification
-    const [otpCode, setOtpCode] = useState("");
+    // Real-time Clock State
+    const [mounted, setMounted] = useState(false);
+    const [time, setTime] = useState("");
+
+    useEffect(() => {
+        setMounted(true);
+        const updateTime = () => setTime(new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false }));
+        updateTime();
+        const timer = setInterval(updateTime, 1000);
+        return () => clearInterval(timer);
+    }, []);
 
     const [formData, setFormData] = useState({
         name: "",
         email: "",
         password: "",
-        phone: "",
-        govtId: "",
-        businessName: "",
+        confirmPassword: ""
     });
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        let value = e.target.value;
-        if (e.target.id === "phone") {
-            // Enforce numeric only and max 10 digits
-            value = value.replace(/\D/g, '').slice(0, 10);
-        }
-        setFormData({ ...formData, [e.target.id]: value });
+        setFormData({ ...formData, [e.target.id]: e.target.value });
     };
 
-    const handleOtpChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setOtpCode(e.target.value);
+    const handleRoleSelect = (selectedRole: AccessRole) => {
+        setRole(selectedRole);
     };
 
-    // Handle Password Login/Signup via Server Actions
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         setError("");
-        setSuccessMessage(""); // Clear success message on new attempt
+        setSuccessMessage("");
+
+        if (authMode === "signup" && formData.password !== formData.confirmPassword) {
+            setError("Passwords do not match.");
+            setLoading(false);
+            return;
+        }
 
         try {
-            // PHONE OTP FLOW
-            if (authMethod === "phone") {
-                if (!otpSent) {
-                    // Send OTP
-                    const result = await sendPhoneOtp(formData.phone);
-                    if (result.error) {
-                        setError(result.error);
-                        // If user not found, we could auto-switch to signup, but user requested to "be told"
-                        if ('shouldSignUp' in result && result.shouldSignUp) {
-                            // Optional: Trigger a UI highlight or visual cue
-                        }
-                    } else if (result.success && result.userId) {
-                        setUserId(result.userId);
-                        setOtpSent(true);
-                        setSuccessMessage("OTP sent successfully!");
-                    }
-                } else {
-                    // Verify OTP
-                    const result = await verifyPhoneOtp(userId, otpCode);
-                    if (result.error) {
-                        setError(result.error);
-                    } else {
-                        // Success - Redirect
-                        window.location.href = "/dashboard";
-                    }
-                }
-                setLoading(false);
-                return;
-            }
-
-            // PASSWORD FLOW
             const data = new FormData();
             data.append("email", formData.email);
             data.append("password", formData.password);
 
-            if (isSignUp) {
+            if (authMode === "signup") {
                 data.append("name", formData.name);
-                data.append("phone", formData.phone);
-                data.append("govtId", formData.govtId);
-                data.append("businessName", formData.businessName);
-            }
+                // In a real app we might pass the role down, but our actions currently do not expect it.
+                // We are satisfying the UI specification for the role picker here.
 
-            if (isSignUp) {
                 const result = await signUpWithEmail(data);
                 if (result?.error) {
                     setError(result.error);
                 } else {
                     setIsVerificationSent(true);
-                    setSuccessMessage("Account created! Please check your email to verify your identity.");
+                    setSuccessMessage("System ID Provisioned. Please verify your institutional email.");
                 }
             } else {
                 const result = await signInWithEmail(data);
                 if (result?.error) {
                     setError(result.error);
                 } else {
-                    // Success! Hard redirect to pick up new cookie
                     window.location.href = "/dashboard";
                     return;
                 }
             }
         } catch (err: unknown) {
             console.error("Auth Error:", err);
-            setError(err instanceof Error ? err.message : "An unexpected error occurred. Please try again.");
+            setError(err instanceof Error ? err.message : "System Exception: Authorization failed.");
         } finally {
             setLoading(false);
         }
     };
 
+    const handleGoogleAuth = async () => {
+        try {
+            await signInWithGoogle();
+        } catch (err) {
+            console.error(err);
+            setError("Google Authentication failed.");
+        }
+    };
+
     return (
-        <div className="min-h-screen w-full bg-brand-background flex items-center justify-center p-4 overflow-hidden relative font-sans text-slate-200">
-            {/* Background Mesh */}
-            <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
-                <div className="mesh-gradient-animated absolute inset-[-20%]"></div>
+        <div className="min-h-screen bg-paper bg-grid flex flex-col font-mono text-carbon antialiased relative">
+
+            {/* Minimalist Top Banner (Consistent with landing) */}
+            <div className="w-full bg-carbon text-paper border-b border-carbon z-50">
+                <div className="container mx-auto px-4 py-2">
+                    <p className="text-center text-[10px] font-mono tracking-[0.2em] uppercase font-bold text-paper/80">
+                        MYSTIC MAITRI | BRAINWARE AI HACKATHON 2026 | POWERED BY AZURE + GEMINI
+                    </p>
+                </div>
             </div>
 
-            {/* Main Card Container */}
-            <main className="relative z-10 w-full max-w-5xl glass-card rounded-3xl overflow-hidden flex flex-col md:flex-row min-h-[600px] border border-white/10 shadow-2xl">
-
-                {/* Left Column (Brand & Info) */}
-                <section className="hidden md:flex md:w-5/12 relative bg-white/[0.02] border-r border-white/5 flex-col p-10 justify-between overflow-hidden">
-                    {/* Decorative Visualization */}
-                    <div className="absolute inset-0 opacity-20 pointer-events-none">
-                        <svg className="w-full h-full" viewBox="0 0 400 600" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M0 100 Q 100 50 200 150 T 400 100" stroke="url(#grad1)" strokeWidth="2" fill="none" />
-                            <path d="M0 200 Q 150 250 250 150 T 400 250" stroke="url(#grad1)" strokeWidth="2" fill="none" />
-                            <path d="M0 300 Q 50 350 200 250 T 400 350" stroke="url(#grad1)" strokeWidth="2" fill="none" />
-                            <defs>
-                                <linearGradient id="grad1" x1="0%" x2="100%" y1="0%" y2="0%">
-                                    <stop offset="0%" style={{ stopColor: "#10B981", stopOpacity: 1 }} />
-                                    <stop offset="100%" style={{ stopColor: "#06B6D4", stopOpacity: 1 }} />
-                                </linearGradient>
-                            </defs>
-                        </svg>
+            {/* Header */}
+            <header className="z-10 flex items-center justify-between border-b border-carbon bg-paper/90 backdrop-blur-sm px-6 py-4 md:px-8 md:py-6">
+                <Link href="/" className="flex items-center gap-4 group">
+                    <div className="size-6 bg-carbon flex items-center justify-center text-paper group-hover:bg-teal transition-colors">
+                        <span className="material-symbols-outlined text-sm">shield_lock</span>
                     </div>
+                    <h1 className="text-lg md:text-xl font-bold tracking-tighter uppercase text-carbon">MYSTIC</h1>
+                </Link>
+                <div className="font-mono text-[10px] uppercase tracking-widest text-carbon/60 hidden md:block">
+                    v4.2.0 // auth_node_01
+                </div>
+            </header>
 
-                    <div className="relative z-10">
-                        <Link href="/" className="inline-block mb-8 hover:opacity-80 transition-opacity">
-                            <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center shadow-lg shadow-emerald-500/20">
-                                    <Activity className="h-5 w-5 text-white" />
-                                </div>
-                                <span className="text-white font-bold text-xl tracking-tight">Medcify</span>
-                            </div>
-                        </Link>
-                        <h2 className="text-3xl font-bold tracking-tight text-white leading-tight mb-4">
-                            {isVerificationSent ? "Almost there." : (isSignUp ? "Join the Network." : "Welcome back.")}
+            {/* Main Content (Split Screen Desktop, Stacked Mobile) */}
+            <main className="flex-grow flex flex-col md:flex-row pb-16 md:pb-12 h-auto">
+
+                {/* Left Panel: Manifesto */}
+                <div className="w-full md:w-1/2 p-8 md:p-16 border-b md:border-b-0 md:border-r border-carbon flex flex-col justify-between bg-paper/80 backdrop-blur-sm">
+                    <div className="space-y-12">
+                        <h2 className="font-serif text-5xl md:text-7xl lg:text-8xl italic font-bold leading-[0.9] tracking-tight text-carbon">
+                            Secure<br />Healthcare<br />Intelligence.
                         </h2>
-                        <p className="text-slate-400 font-light leading-relaxed">
-                            {isVerificationSent
-                                ? "Verify your email to access the dashboard."
-                                : "Access predictive inventory insights and local health network data."
-                            }
+                        <p className="max-w-md text-sm leading-relaxed uppercase tracking-tight text-carbon/80">
+                            Mystic Maitri operates as a human-authorized clinical coordination layer.
+                            All AI-generated actions require explicit verification before execution.
                         </p>
                     </div>
 
-                    <div className="relative z-10">
-                        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold tracking-wider uppercase">
-                            <ShieldCheck className="w-3.5 h-3.5" />
-                            Enterprise Grade Encryption
+                    <div className="flex flex-wrap gap-2 mt-12 mb-8 md:mb-0">
+                        <div className="border border-carbon px-3 py-1.5 text-[10px] font-bold bg-paper">
+                            [MULTIMODAL INPUT VERIFIED]
+                        </div>
+                        <div className="border border-carbon px-3 py-1.5 text-[10px] font-bold bg-paper">
+                            [HUMAN-IN-THE-LOOP]
+                        </div>
+                        <div className="border border-carbon px-3 py-1.5 text-[10px] font-bold bg-paper">
+                            [FHIR DATA ENABLED]
                         </div>
                     </div>
-                </section>
+                </div>
 
-                {/* Right Column (Auth Form) */}
-                <section className="w-full md:w-7/12 p-6 md:p-12 flex flex-col justify-center bg-brand-background/50 backdrop-blur-sm relative">
+                {/* Right Panel: Access Portal */}
+                <div className="w-full md:w-1/2 p-8 md:p-16 flex flex-col bg-paper relative">
 
-                    {/* Mobile Only: Back to Home Button */}
-                    <div className="absolute top-6 left-6 md:hidden">
-                        <Link href="/" className="inline-flex items-center justify-center p-2 rounded-full bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-colors">
-                            <Activity className="w-4 h-4" />
-                        </Link>
-                    </div>
+                    <div className="max-w-md w-full mx-auto flex-grow flex flex-col pt-4 md:pt-0 pb-16 min-h-[600px]">
 
-                    {/* Verification Sent State */}
-                    {isVerificationSent ? (
-                        <div className="text-center space-y-6 animate-fade-in-up">
-                            <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto border border-emerald-500/20 shadow-lg shadow-emerald-500/10">
-                                <Mail className="w-10 h-10 text-emerald-400" />
+                        {/* Status / Feedback Area */}
+                        {(error || successMessage) && (
+                            <div className={`mb-8 p-4 border text-[10px] font-bold uppercase tracking-wide ${error ? 'border-red-500 text-red-600 bg-red-50' : 'border-[#4B7F78] text-[#4B7F78] bg-[#4B7F78]/5'}`}>
+                                {error ? `[ERROR] ${error}` : `[SUCCESS] ${successMessage}`}
                             </div>
-                            <div>
-                                <h3 className="text-2xl font-bold text-white mb-2">Check your inbox</h3>
-                                <p className="text-slate-400 max-w-sm mx-auto">
-                                    We sent a verification link to <span className="text-emerald-400">{formData.email}</span>. Please click the link to activate your account.
-                                </p>
+                        )}
+
+                        {isVerificationSent ? (
+                            <div className="flex flex-col flex-grow items-center justify-center space-y-8 text-center animate-fade-in my-auto">
+                                <span className="material-symbols-outlined text-6xl text-carbon">mark_email_read</span>
+                                <div>
+                                    <h2 className="font-serif text-3xl font-bold text-carbon mb-2">Verify Credential.</h2>
+                                    <p className="text-sm text-carbon/70 max-w-sm mx-auto uppercase tracking-wide mt-4">
+                                        An authorization manifest has been dispatched to <br /><span className="font-bold text-carbon text-lg block mt-2">{formData.email}</span><br />Acknowledge to establish session link.
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        setAuthMode("login");
+                                        setIsVerificationSent(false);
+                                        setSuccessMessage("");
+                                    }}
+                                    className="uppercase tracking-[0.2em] text-[10px] font-bold hover:underline transition-all mt-4 text-[#4B7F78]"
+                                >
+                                    [ RETURN TO LOGIN ]
+                                </button>
                             </div>
-                            <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-sm text-slate-300">
-                                <p>Didn't receive it? <button className="text-emerald-400 hover:underline">Resend Email</button></p>
-                            </div>
-                            <button
-                                onClick={() => window.location.href = '/auth'}
-                                className="text-slate-400 hover:text-white text-sm"
-                            >
-                                Back to Sign In
-                            </button>
-                        </div>
-                    ) : (
-                        <>
-                            {/* Method Tabs */}
-                            {!otpSent && (
-                                <div className="grid grid-cols-3 gap-1 p-1 bg-white/5 rounded-xl mb-8 border border-white/5">
+                        ) : (
+                            <div className="flex flex-col h-full flex-grow relative">
+                                {/* Tab Switcher */}
+                                <div className="flex items-center gap-4 mb-10 border-b border-carbon/20 pb-4">
                                     <button
-                                        onClick={() => setAuthMethod("password")}
-                                        className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 ${authMethod === "password" ? "bg-white/10 text-white shadow-sm" : "text-slate-400 hover:text-white"}`}
+                                        onClick={() => { setAuthMode("login"); setError(""); }}
+                                        className={`text-[10px] font-bold uppercase tracking-[0.2em] transition-colors ${authMode === 'login' ? 'text-carbon' : 'text-carbon/40 hover:text-carbon/70'}`}
                                     >
-                                        <KeyRound className="w-4 h-4" /> Password
+                                        [ LOGIN ]
                                     </button>
                                     <button
-                                        onClick={() => setAuthMethod("email-otp")}
-                                        className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 ${authMethod === "email-otp" ? "bg-white/10 text-white shadow-sm" : "text-slate-400 hover:text-white"}`}
+                                        onClick={() => { setAuthMode("signup"); setError(""); }}
+                                        className={`text-[10px] font-bold uppercase tracking-[0.2em] transition-colors ${authMode === 'signup' ? 'text-carbon' : 'text-carbon/40 hover:text-carbon/70'}`}
                                     >
-                                        <Mail className="w-4 h-4" /> OTP
-                                    </button>
-                                    <button
-                                        onClick={() => setAuthMethod("phone")}
-                                        className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 ${authMethod === "phone" ? "bg-white/10 text-white shadow-sm" : "text-slate-400 hover:text-white"}`}
-                                    >
-                                        <Smartphone className="w-4 h-4" /> Phone
+                                        [ INITIALIZE ACCOUNT ]
                                     </button>
                                 </div>
-                            )}
 
-                            {/* Header */}
-                            <div className="mb-6">
-                                <h3 className="text-xl font-semibold text-white">
-                                    {otpSent ? "Enter Verification Code" : (isSignUp ? "Create Provider Account" : (authMethod === 'phone' ? "Sign In with Phone" : "Sign In"))}
-                                </h3>
-                                <p className="text-slate-400 text-sm">
-                                    {otpSent ? "We sent a 6-digit code to your device." : "Enter your details below to continue."}
-                                </p>
-                            </div>
-
-                            {/* Sticky Alert Banner */}
-                            {(error || successMessage) && (
-                                <div className={`mb-6 p-4 rounded-xl border flex items-start gap-3 text-sm animate-fade-in ${error ? 'bg-red-500/10 border-red-500/20 text-red-200' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-200'}`}>
-                                    {error ? <AlertCircle className="w-5 h-5 shrink-0 text-red-400" /> : <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400" />}
-                                    <div>
-                                        <p className="font-semibold">{error ? "Authentication Error" : "Success"}</p>
-                                        <p className="opacity-90">{error || successMessage}</p>
-                                    </div>
+                                {/* Dynamic Header */}
+                                <div className="mb-10">
+                                    {authMode === "login" ? (
+                                        <h3 className="text-xs font-bold tracking-[0.2em] text-carbon">SYSTEM ACCESS // LOGIN_V4.0</h3>
+                                    ) : (
+                                        <div className="space-y-4">
+                                            <h3 className="font-serif text-4xl italic font-bold text-carbon mb-2">Join the Network.</h3>
+                                            <div className="inline-block px-2 py-1 bg-carbon text-paper text-[10px] font-mono uppercase tracking-widest mt-2">
+                                                SYSTEM_ID: GENERATING...
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
-                            )}
 
-                            {/* Main Form */}
-                            <form className="space-y-5" onSubmit={handleAuth}>
+                                {/* Form */}
+                                <form className="space-y-8 flex-grow flex flex-col justify-between" onSubmit={handleAuth}>
 
-                                {otpSent ? (
-                                    <div className="space-y-1.5 animate-fade-in-up">
-                                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider" htmlFor="otp">Verification Code</label>
-                                        <div className="relative">
-                                            <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                                    <div className="space-y-6">
+                                        {/* Sign Up Fields */}
+                                        {authMode === "signup" && (
+                                            <div className="group relative">
+                                                <input
+                                                    className="w-full bg-transparent border-t-0 border-x-0 border-b border-carbon py-3 px-0 font-mono text-sm font-bold placeholder:text-carbon/30 focus:outline-none focus:ring-0 focus:border-carbon transition-colors"
+                                                    id="name"
+                                                    type="text"
+                                                    placeholder="FULL NAME"
+                                                    value={formData.name}
+                                                    onChange={handleInputChange}
+                                                    required
+                                                />
+                                            </div>
+                                        )}
+
+                                        {/* Common Fields */}
+                                        <div className="group relative">
                                             <input
-                                                className="w-full bg-white/[0.02] border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white placeholder:text-slate-600 focus:border-emerald-500/50 focus:ring-0 focus:outline-none input-glow transition-all font-mono tracking-widest text-lg"
-                                                id="otp"
-                                                placeholder="123456"
-                                                type="text"
-                                                maxLength={6}
-                                                value={otpCode}
-                                                onChange={handleOtpChange}
+                                                className="w-full bg-transparent border-t-0 border-x-0 border-b border-carbon py-3 px-0 font-mono text-sm font-bold placeholder:text-carbon/30 focus:outline-none focus:ring-0 focus:border-carbon transition-colors"
+                                                id="email"
+                                                type="email"
+                                                placeholder={authMode === "signup" ? "INSTITUTIONAL EMAIL" : "USER EMAIL"}
+                                                value={formData.email}
+                                                onChange={handleInputChange}
                                                 required
                                             />
                                         </div>
+
+                                        <div className="group relative">
+                                            <input
+                                                className="w-full bg-transparent border-t-0 border-x-0 border-b border-carbon py-3 px-0 font-mono text-sm font-bold placeholder:text-carbon/30 focus:outline-none focus:ring-0 focus:border-carbon transition-colors pr-16"
+                                                id="password"
+                                                type="password"
+                                                placeholder="PASSWORD"
+                                                value={formData.password}
+                                                onChange={handleInputChange}
+                                                required
+                                            />
+                                            {authMode === "login" && (
+                                                <button type="button" className="absolute right-0 top-1/2 -translate-y-1/2 text-[10px] font-bold uppercase tracking-wider text-carbon/50 hover:text-carbon transition-colors">
+                                                    Reset
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        {/* Confirm Password (Sign Up Only) */}
+                                        {authMode === "signup" && (
+                                            <div className="group relative">
+                                                <input
+                                                    className="w-full bg-transparent border-t-0 border-x-0 border-b border-carbon py-3 px-0 font-mono text-sm font-bold placeholder:text-carbon/30 focus:outline-none focus:ring-0 focus:border-carbon transition-colors"
+                                                    id="confirmPassword"
+                                                    type="password"
+                                                    placeholder="CONFIRM PASSWORD"
+                                                    value={formData.confirmPassword}
+                                                    onChange={handleInputChange}
+                                                    required
+                                                />
+                                            </div>
+                                        )}
                                     </div>
-                                ) : (
-                                    <>
-                                        {isSignUp && authMethod === "password" && (
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-in-up">
-                                                <div className="space-y-1.5">
-                                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider" htmlFor="name">Full Name</label>
-                                                    <div className="relative">
-                                                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                                                        <input
-                                                            className="w-full bg-white/[0.02] border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white placeholder:text-slate-600 focus:border-emerald-500/50 focus:ring-0 focus:outline-none input-glow transition-all"
-                                                            id="name"
-                                                            placeholder="Dr. John Doe"
-                                                            type="text"
-                                                            value={formData.name}
-                                                            onChange={handleInputChange}
-                                                            required={isSignUp}
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <div className="space-y-1.5">
-                                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider" htmlFor="phone">Phone</label>
-                                                    <div className="relative">
-                                                        <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                                                        <input
-                                                            className="w-full bg-white/[0.02] border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white placeholder:text-slate-600 focus:border-emerald-500/50 focus:ring-0 focus:outline-none input-glow transition-all"
-                                                            id="phone"
-                                                            placeholder="+91 98765 43210"
-                                                            type="tel"
-                                                            value={formData.phone}
-                                                            onChange={handleInputChange}
-                                                            required={isSignUp}
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <div className="space-y-1.5 md:col-span-2">
-                                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider" htmlFor="businessName">Clinic / Pharmacy Name</label>
-                                                    <div className="relative">
-                                                        <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                                                        <input
-                                                            className="w-full bg-white/[0.02] border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white placeholder:text-slate-600 focus:border-emerald-500/50 focus:ring-0 focus:outline-none input-glow transition-all"
-                                                            id="businessName"
-                                                            placeholder="City Care Pharmacy"
-                                                            type="text"
-                                                            value={formData.businessName}
-                                                            onChange={handleInputChange}
-                                                            required={isSignUp}
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <div className="space-y-1.5 md:col-span-2">
-                                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider" htmlFor="govtId">Government ID (PAN / Aadhaar / License)</label>
-                                                    <div className="relative">
-                                                        <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                                                        <input
-                                                            className="w-full bg-white/[0.02] border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white placeholder:text-slate-600 focus:border-emerald-500/50 focus:ring-0 focus:outline-none input-glow transition-all"
-                                                            id="govtId"
-                                                            placeholder="ABCDE1234F"
-                                                            type="text"
-                                                            value={formData.govtId}
-                                                            onChange={handleInputChange}
-                                                            required={isSignUp}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
 
-                                        {authMethod === "phone" ? (
-                                            <div className="space-y-1.5">
-                                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider" htmlFor="phone">Mobile Number</label>
-                                                <div className="relative flex items-center">
-                                                    <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                                                        <Smartphone className="w-4 h-4 text-slate-500" />
-                                                        <span className="text-slate-400 font-mono text-sm border-r border-white/10 pr-2">+91</span>
-                                                    </div>
-                                                    <input
-                                                        className="w-full bg-white/[0.02] border border-white/10 rounded-xl pl-16 pr-4 py-3 text-white placeholder:text-slate-600 focus:border-emerald-500/50 focus:ring-0 focus:outline-none input-glow transition-all font-mono text-lg tracking-wide"
-                                                        id="phone"
-                                                        placeholder="98765 43210"
-                                                        type="tel"
-                                                        value={formData.phone}
-                                                        onChange={handleInputChange}
-                                                        required
-                                                    />
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <div className="space-y-1.5">
-                                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider" htmlFor="email">Work Email</label>
-                                                <div className="relative">
-                                                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                                                    <input
-                                                        className="w-full bg-white/[0.02] border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white placeholder:text-slate-600 focus:border-emerald-500/50 focus:ring-0 focus:outline-none input-glow transition-all"
-                                                        id="email"
-                                                        placeholder="name@hospital.com"
-                                                        type="email"
-                                                        value={formData.email}
-                                                        onChange={handleInputChange}
-                                                        required
-                                                    />
-                                                </div>
-                                            </div>
-                                        )}
+                                    {/* Role Selector */}
+                                    <div className="space-y-4 pt-6">
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-carbon/50">ASSIGNED ROLE</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {["Clinician", "Pharmacist", "Admin", "Operations"].map((r) => (
+                                                <button
+                                                    key={r}
+                                                    type="button"
+                                                    onClick={() => handleRoleSelect(r as AccessRole)}
+                                                    className={`px-4 py-2 rounded-full border border-carbon text-[10px] font-bold uppercase transition-colors ${role === r ? 'bg-carbon text-paper' : 'bg-transparent text-carbon hover:bg-carbon/10'}`}
+                                                >
+                                                    [{r}]
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
 
-                                        {authMethod === "password" && (
-                                            <div className="space-y-1.5 animate-fade-in-up">
-                                                <div className="flex justify-between items-center">
-                                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider" htmlFor="password">
-                                                        {isSignUp ? "Secure Password" : "Password"}
-                                                    </label>
-                                                    {!isSignUp && <Link className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors" href="#">Forgot password?</Link>}
-                                                </div>
-                                                <div className="relative">
-                                                    <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                                                    <input
-                                                        className="w-full bg-white/[0.02] border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white placeholder:text-slate-600 focus:border-emerald-500/50 focus:ring-0 focus:outline-none input-glow transition-all"
-                                                        id="password"
-                                                        placeholder="••••••••"
-                                                        type="password"
-                                                        value={formData.password}
-                                                        onChange={handleInputChange}
-                                                        required
-                                                    />
-                                                </div>
-                                                {isSignUp && <p className="text-[10px] text-slate-500">Must involve 8+ chars, numbers & symbols.</p>}
-                                            </div>
-                                        )}
-                                    </>
-                                )}
+                                    <div className="mt-8 flex-grow flex flex-col justify-end">
+                                        <button
+                                            type="submit"
+                                            disabled={loading}
+                                            className="w-full bg-carbon text-paper rounded-full py-5 text-sm font-bold uppercase tracking-[0.2em] hover:bg-[#4B7F78] transition-colors flex items-center justify-center gap-2 disabled:opacity-50 mt-8"
+                                        >
+                                            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : (authMode === "login" ? "[ AUTHENTICATE SESSION ]" : "[ REQUEST SYSTEM ACCESS ]")}
+                                        </button>
 
-                                <button
-                                    className="w-full bg-white text-brand-background font-bold py-3.5 rounded-xl hover:bg-slate-100 transition-all active:scale-[0.98] shadow-lg shadow-white/5 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed group"
-                                    type="submit"
-                                    disabled={loading}
-                                >
-                                    {loading
-                                        ? <Loader2 className="w-4 h-4 animate-spin" />
-                                        : (otpSent
-                                            ? "Verify & Login"
-                                            : (authMethod === "password"
-                                                ? (isSignUp ? "Create Provider Account" : "Access Dashboard")
-                                                : "Send Verification Code"
-                                            )
-                                        )
-                                    }
-                                    {!loading && <CheckCircle2 className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity text-brand-background" />}
-                                </button>
-                            </form>
+                                        {/* Google OAuth Button */}
+                                        <button
+                                            type="button"
+                                            onClick={handleGoogleAuth}
+                                            disabled={loading}
+                                            className="w-full bg-transparent border border-carbon text-carbon rounded-full py-4 text-xs font-bold uppercase tracking-[0.2em] hover:bg-carbon hover:text-paper transition-colors flex items-center justify-center gap-2 disabled:opacity-50 mt-4"
+                                        >
+                                            [ AUTHENTICATE VIA GOOGLE ]
+                                        </button>
 
-                            {/* Toggle Mode */}
-                            <div className="mt-6 text-center text-sm text-slate-400">
-                                {isSignUp ? "Already verified?" : "New to Medcify?"}{" "}
-                                <button
-                                    onClick={() => {
-                                        setIsSignUp(!isSignUp);
-                                        setError("");
-                                        setSuccessMessage("");
-                                    }}
-                                    className="text-emerald-400 hover:text-emerald-300 font-bold hover:underline"
-                                >
-                                    {isSignUp ? "Sign In" : "Apply for Access"}
-                                </button>
+                                        {/* Technical Footer */}
+                                        <div className="pt-6 text-center">
+                                            <p className="text-[10px] leading-relaxed text-carbon/50 uppercase">
+                                                All system actions are logged and auditable. <br />
+                                                Unauthorized access is strictly prohibited under protocol 8.41-B.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </form>
                             </div>
-                        </>
-                    )}
-                </section>
-            </main >
-        </div >
+                        )}
+                    </div>
+                </div>
+            </main>
+
+            {/* System Footer Ticker (Fixed Bottom) */}
+            <footer className="fixed bottom-0 left-0 w-full z-20 border-t border-carbon bg-paper/95 backdrop-blur px-4 md:px-8 py-2 md:py-3 flex items-center justify-between">
+                <div className="flex items-center gap-4 md:gap-6 overflow-x-auto whitespace-nowrap hide-scrollbar">
+                    <div className="flex items-center gap-2 shrink-0">
+                        <span className="size-2 bg-green-500 rounded-full animate-pulse"></span>
+                        <span className="text-[10px] font-bold text-carbon">[NODE STATUS: ONLINE]</span>
+                    </div>
+                    <span className="text-[10px] font-bold text-carbon/20 shrink-0">|</span>
+                    <span className="text-[10px] font-bold text-carbon shrink-0">[AUTH SERVER: ACTIVE]</span>
+                    <span className="text-[10px] font-bold text-carbon/20 shrink-0">|</span>
+                    <span className="text-[10px] font-bold text-carbon shrink-0">[UPTIME: 99.9%]</span>
+                    <span className="text-[10px] font-bold text-carbon/20 shrink-0">|</span>
+                    <span className="text-[10px] font-bold text-carbon shrink-0">[ENCRYPTION: AES-256]</span>
+                </div>
+                <div className="hidden lg:flex shrink-0 pl-4 items-center gap-2">
+                    <span className="material-symbols-outlined text-[12px] text-carbon">lock</span>
+                    <span className="text-[10px] font-bold uppercase text-carbon">System_Time: {mounted ? time : "00:00:00"} IST</span>
+                </div>
+            </footer>
+        </div>
     );
 }
