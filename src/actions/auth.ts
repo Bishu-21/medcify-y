@@ -181,6 +181,10 @@ export async function getLoggedInUser() {
         const { account } = await createSessionClient(session.value);
         return await account.get();
     } catch (error) {
+        // Handle Next.js dynamic server usage error (thrown during static build/pre-rendering)
+        if (error && typeof error === 'object' && 'digest' in error && error.digest === 'DYNAMIC_SERVER_USAGE') {
+            throw error;
+        }
         console.error("Get User Error:", error);
         return null;
     }
